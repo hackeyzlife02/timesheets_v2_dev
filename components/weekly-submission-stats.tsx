@@ -10,11 +10,13 @@ import { AlertCircle, CheckCircle, Clock, Users } from "lucide-react"
 interface WeeklySubmissionStatsProps {
   stats: {
     totalEmployees: number
+    hourlyEmployees: number
     timesheetsCreated: number
     timesheetsCertified: number
     pendingApproval: number
     totalHours: number
     totalSalary: number
+    missingTimesheets?: number
   } | null
   weekStartDate: Date
 }
@@ -35,16 +37,16 @@ export function WeeklySubmissionStats({ stats, weekStartDate }: WeeklySubmission
   const isCurrentWeek = isWeekCurrent(weekStartDate)
   const isPastWeek = isPastDate(weekStartDate)
 
-  // Calculate percentages
+  // Calculate percentages using hourly employees as denominator for ALL metrics
   const createdPercentage =
-    stats.totalEmployees > 0 ? Math.round((stats.timesheetsCreated / stats.totalEmployees) * 100) : 0
+    stats.hourlyEmployees > 0 ? Math.round((stats.timesheetsCreated / stats.hourlyEmployees) * 100) : 0
 
   const certifiedPercentage =
-    stats.timesheetsCreated > 0 ? Math.round((stats.timesheetsCertified / stats.timesheetsCreated) * 100) : 0
+    stats.hourlyEmployees > 0 ? Math.round((stats.timesheetsCertified / stats.hourlyEmployees) * 100) : 0
 
   const approvedPercentage =
-    stats.timesheetsCertified > 0
-      ? Math.round(((stats.timesheetsCertified - stats.pendingApproval) / stats.timesheetsCertified) * 100)
+    stats.hourlyEmployees > 0
+      ? Math.round(((stats.timesheetsCertified - stats.pendingApproval) / stats.hourlyEmployees) * 100)
       : 0
 
   return (
@@ -63,9 +65,9 @@ export function WeeklySubmissionStats({ stats, weekStartDate }: WeeklySubmission
               <Progress value={createdPercentage} className="h-2" />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
-                  {stats.timesheetsCreated} of {stats.totalEmployees} employees
+                  {stats.timesheetsCreated} of {stats.hourlyEmployees} employees
                 </span>
-                <span>{stats.totalEmployees - stats.timesheetsCreated} missing</span>
+                <span>{stats.hourlyEmployees - stats.timesheetsCreated} missing</span>
               </div>
             </div>
 
@@ -80,9 +82,9 @@ export function WeeklySubmissionStats({ stats, weekStartDate }: WeeklySubmission
               <Progress value={certifiedPercentage} className="h-2" />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
-                  {stats.timesheetsCertified} of {stats.timesheetsCreated} timesheets
+                  {stats.timesheetsCertified} of {stats.hourlyEmployees} employees
                 </span>
-                <span>{stats.timesheetsCreated - stats.timesheetsCertified} uncertified</span>
+                <span>{stats.hourlyEmployees - stats.timesheetsCertified} uncertified</span>
               </div>
             </div>
 
@@ -97,7 +99,7 @@ export function WeeklySubmissionStats({ stats, weekStartDate }: WeeklySubmission
               <Progress value={approvedPercentage} className="h-2" />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
-                  {stats.timesheetsCertified - stats.pendingApproval} of {stats.timesheetsCertified} approved
+                  {stats.timesheetsCertified - stats.pendingApproval} of {stats.hourlyEmployees} approved
                 </span>
                 <span>{stats.pendingApproval} pending</span>
               </div>
@@ -122,19 +124,19 @@ export function WeeklySubmissionStats({ stats, weekStartDate }: WeeklySubmission
         </CardContent>
       </Card>
 
-      {isCurrentWeek && stats.timesheetsCreated < stats.totalEmployees && (
+      {isCurrentWeek && stats.timesheetsCreated < stats.hourlyEmployees && (
         <Alert className="bg-amber-50 border-amber-200">
           <AlertCircle className="h-4 w-4 text-amber-600" />
           <AlertTitle className="text-amber-800">Missing Timesheets</AlertTitle>
           <AlertDescription className="text-amber-700">
             <p>
-              {stats.totalEmployees - stats.timesheetsCreated} employees have not created a timesheet for this week.
+              {stats.hourlyEmployees - stats.timesheetsCreated} employees have not created a timesheet for this week.
             </p>
             <Button
               variant="outline"
               size="sm"
               className="mt-2 bg-white border-amber-300 text-amber-800 hover:bg-amber-100"
-              onClick={() => router.push("/admin/reports/missing")}
+              onClick={() => router.push("/admin/missing-timesheets")}
             >
               View Missing Timesheets
             </Button>
@@ -142,14 +144,12 @@ export function WeeklySubmissionStats({ stats, weekStartDate }: WeeklySubmission
         </Alert>
       )}
 
-      {isPastWeek && stats.timesheetsCertified < stats.timesheetsCreated && (
+      {isPastWeek && stats.timesheetsCertified < stats.hourlyEmployees && (
         <Alert className="bg-red-50 border-red-200">
           <AlertCircle className="h-4 w-4 text-red-600" />
           <AlertTitle className="text-red-800">Uncertified Timesheets</AlertTitle>
           <AlertDescription className="text-red-700">
-            <p>
-              {stats.timesheetsCreated - stats.timesheetsCertified} timesheets were not certified for this past week.
-            </p>
+            <p>{stats.hourlyEmployees - stats.timesheetsCertified} timesheets were not certified for this past week.</p>
             <Button
               variant="outline"
               size="sm"

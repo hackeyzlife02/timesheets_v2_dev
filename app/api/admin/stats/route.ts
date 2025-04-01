@@ -1,8 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { sql } from "@/lib/db"
+import { neon } from "@neondatabase/serverless"
 
 export async function GET(request: NextRequest) {
   try {
+    console.log("=== ADMIN STATS API CALLED ===")
+
+    // Create a fresh SQL client for this request
+    const sql = neon(process.env.DATABASE_URL!)
+
     // Get the week start date from the query parameters
     const searchParams = request.nextUrl.searchParams
     const weekStartDateParam = searchParams.get("weekStartDate")
@@ -11,49 +16,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: "weekStartDate parameter is required" }, { status: 400 })
     }
 
-    // Parse the date and ensure it's in the correct format for PostgreSQL
+    // Parse the date as is
     const weekStartDate = new Date(weekStartDateParam)
-    const formattedStartDate = weekStartDate.toISOString().split("T")[0] // YYYY-MM-DD format
 
-    // Calculate the end of the week (7 days later)
-    const weekEndDate = new Date(weekStartDate)
-    weekEndDate.setDate(weekStartDate.getDate() + 7)
-    const formattedEndDate = weekEndDate.toISOString().split("T")[0] // YYYY-MM-DD format
+    // Format date for SQL query
+    const formattedStartDate = weekStartDate.toISOString().split("T")[0]
 
-    console.log(`Fetching stats for week: ${formattedStartDate} to ${formattedEndDate}`)
+    console.log(`Fetching stats for week starting: ${formattedStartDate}`)
 
+    // Get total number of hourly employees (for denominator)
+    let hourlyEmployees = 0
     try {
-      // Debug: Check the structure of the timesheets table
-      const tableStructure = await sql`
-        SELECT column_name, data_type 
-        FROM information_schema.columns 
-        WHERE table_name = 'timesheets'
-      `
-      console.log(
-        "Debug - Timesheet table structure:",
-        tableStructure?.rows ? JSON.stringify(tableStructure.rows) : "No data",
-      )
-    } catch (e) {
-      console.error("Error checking table structure:", e)
-    }
-
-    try {
-      // Debug: Check what's in the database for this week
-      const debugTimesheets = await sql`
-        SELECT * 
-        FROM timesheets 
-        WHERE week_start_date >= ${formattedStartDate}::date 
-        AND week_start_date < ${formattedEndDate}::date
-        LIMIT 1
+      const hourlyEmployeesResult = await sql`
+        SELECT COUNT(*) as count 
+        FROM users 
+        WHERE is_admin = false 
+        AND is_active = true
+        AND employee_type = 'hourly'
       `
 
-      if (debugTimesheets?.rows && debugTimesheets.rows.length > 0) {
-        console.log("Debug - Sample timesheet columns:", Object.keys(debugTimesheets.rows[0]))
-      } else {
-        console.log("Debug - No timesheets found for the specified week")
+      if (hourlyEmployeesResult && hourlyEmployeesResult.length > 0) {
+        hourlyEmployees = Number.parseInt(hourlyEmployeesResult[0].count, 10) || 0
       }
+      console.log(`Total hourly employees: ${hourlyEmployees}`)
     } catch (e) {
-      console.error("Error checking sample timesheet:", e)
+      console.error("Error counting hourly employees:", e)
     }
 
     // Get total number of active employees
@@ -66,8 +53,8 @@ export async function GET(request: NextRequest) {
         AND is_active = true
       `
 
-      if (employeesResult?.rows && employeesResult.rows.length > 0) {
-        totalEmployees = Number.parseInt(employeesResult.rows[0].count, 10) || 0
+      if (employeesResult && employeesResult.length > 0) {
+        totalEmployees = Number.parseInt(employeesResult[0].count, 10) || 0
       }
       console.log(`Total active employees: ${totalEmployees}`)
     } catch (e) {
@@ -80,12 +67,11 @@ export async function GET(request: NextRequest) {
       const timesheetsCreatedResult = await sql`
         SELECT COUNT(*) as count 
         FROM timesheets 
-        WHERE week_start_date >= ${formattedStartDate}::date 
-        AND week_start_date < ${formattedEndDate}::date
+        WHERE DATE(week_start_date) = ${formattedStartDate}::date
       `
 
-      if (timesheetsCreatedResult?.rows && timesheetsCreatedResult.rows.length > 0) {
-        timesheetsCreated = Number.parseInt(timesheetsCreatedResult.rows[0].count, 10) || 0
+      if (timesheetsCreatedResult && timesheetsCreatedResult.length > 0) {
+        timesheetsCreated = Number.parseInt(timesheetsCreatedResult[0].count, 10) || 0
       }
       console.log(`Timesheets created: ${timesheetsCreated}`)
     } catch (e) {
@@ -98,13 +84,12 @@ export async function GET(request: NextRequest) {
       const timesheetsCertifiedResult = await sql`
         SELECT COUNT(*) as count 
         FROM timesheets 
-        WHERE week_start_date >= ${formattedStartDate}::date 
-        AND week_start_date < ${formattedEndDate}::date
+        WHERE DATE(week_start_date) = ${formattedStartDate}::date
         AND certified = true
       `
 
-      if (timesheetsCertifiedResult?.rows && timesheetsCertifiedResult.rows.length > 0) {
-        timesheetsCertified = Number.parseInt(timesheetsCertifiedResult.rows[0].count, 10) || 0
+      if (timesheetsCertifiedResult && timesheetsCertifiedResult.length > 0) {
+        timesheetsCertified = Number.parseInt(timesheetsCertifiedResult[0].count, 10) || 0
       }
       console.log(`Timesheets certified: ${timesheetsCertified}`)
     } catch (e) {
@@ -117,14 +102,13 @@ export async function GET(request: NextRequest) {
       const pendingApprovalResult = await sql`
         SELECT COUNT(*) as count 
         FROM timesheets 
-        WHERE week_start_date >= ${formattedStartDate}::date 
-        AND week_start_date < ${formattedEndDate}::date
+        WHERE DATE(week_start_date) = ${formattedStartDate}::date
         AND certified = true
         AND admin_approved = false
       `
 
-      if (pendingApprovalResult?.rows && pendingApprovalResult.rows.length > 0) {
-        pendingApproval = Number.parseInt(pendingApprovalResult.rows[0].count, 10) || 0
+      if (pendingApprovalResult && pendingApprovalResult.length > 0) {
+        pendingApproval = Number.parseInt(pendingApprovalResult[0].count, 10) || 0
       }
       console.log(`Pending approval: ${pendingApproval}`)
     } catch (e) {
@@ -143,15 +127,14 @@ export async function GET(request: NextRequest) {
           COALESCE(SUM(total_overtime_hours), 0) as overtime,
           COALESCE(SUM(total_double_time_hours), 0) as doubletime
         FROM timesheets 
-        WHERE week_start_date >= ${formattedStartDate}::date 
-        AND week_start_date < ${formattedEndDate}::date
+        WHERE DATE(week_start_date) = ${formattedStartDate}::date
         AND certified = false
       `
 
-      if (pendingHoursResult?.rows && pendingHoursResult.rows.length > 0) {
-        pendingRegularHours = Number.parseFloat(pendingHoursResult.rows[0].regular || 0)
-        pendingOvertimeHours = Number.parseFloat(pendingHoursResult.rows[0].overtime || 0)
-        pendingDoubleTimeHours = Number.parseFloat(pendingHoursResult.rows[0].doubletime || 0)
+      if (pendingHoursResult && pendingHoursResult.length > 0) {
+        pendingRegularHours = Number.parseFloat(pendingHoursResult[0].regular || 0)
+        pendingOvertimeHours = Number.parseFloat(pendingHoursResult[0].overtime || 0)
+        pendingDoubleTimeHours = Number.parseFloat(pendingHoursResult[0].doubletime || 0)
       }
     } catch (e) {
       console.error("Error calculating pending hours:", e)
@@ -171,16 +154,15 @@ export async function GET(request: NextRequest) {
           COALESCE(SUM(total_overtime_hours), 0) as overtime,
           COALESCE(SUM(total_double_time_hours), 0) as doubletime
         FROM timesheets 
-        WHERE week_start_date >= ${formattedStartDate}::date 
-        AND week_start_date < ${formattedEndDate}::date
+        WHERE DATE(week_start_date) = ${formattedStartDate}::date
         AND certified = true
         AND admin_approved = false
       `
 
-      if (submittedHoursResult?.rows && submittedHoursResult.rows.length > 0) {
-        submittedRegularHours = Number.parseFloat(submittedHoursResult.rows[0].regular || 0)
-        submittedOvertimeHours = Number.parseFloat(submittedHoursResult.rows[0].overtime || 0)
-        submittedDoubleTimeHours = Number.parseFloat(submittedHoursResult.rows[0].doubletime || 0)
+      if (submittedHoursResult && submittedHoursResult.length > 0) {
+        submittedRegularHours = Number.parseFloat(submittedHoursResult[0].regular || 0)
+        submittedOvertimeHours = Number.parseFloat(submittedHoursResult[0].overtime || 0)
+        submittedDoubleTimeHours = Number.parseFloat(submittedHoursResult[0].doubletime || 0)
       }
     } catch (e) {
       console.error("Error calculating submitted hours:", e)
@@ -200,16 +182,15 @@ export async function GET(request: NextRequest) {
           COALESCE(SUM(total_overtime_hours), 0) as overtime,
           COALESCE(SUM(total_double_time_hours), 0) as doubletime
         FROM timesheets 
-        WHERE week_start_date >= ${formattedStartDate}::date 
-        AND week_start_date < ${formattedEndDate}::date
+        WHERE DATE(week_start_date) = ${formattedStartDate}::date
         AND certified = true
         AND admin_approved = true
       `
 
-      if (approvedHoursResult?.rows && approvedHoursResult.rows.length > 0) {
-        approvedRegularHours = Number.parseFloat(approvedHoursResult.rows[0].regular || 0)
-        approvedOvertimeHours = Number.parseFloat(approvedHoursResult.rows[0].overtime || 0)
-        approvedDoubleTimeHours = Number.parseFloat(approvedHoursResult.rows[0].doubletime || 0)
+      if (approvedHoursResult && approvedHoursResult.length > 0) {
+        approvedRegularHours = Number.parseFloat(approvedHoursResult[0].regular || 0)
+        approvedOvertimeHours = Number.parseFloat(approvedHoursResult[0].overtime || 0)
+        approvedDoubleTimeHours = Number.parseFloat(approvedHoursResult[0].doubletime || 0)
       }
     } catch (e) {
       console.error("Error calculating approved hours:", e)
@@ -226,11 +207,37 @@ export async function GET(request: NextRequest) {
 
     console.log(`Total hours: ${totalHours}`)
 
+    // Count missing timesheets (hourly employees without a timesheet for this week)
+    let missingTimesheets = 0
+    try {
+      // Get all active hourly employees who have NOT submitted a timesheet for this week
+      const missingTimesheetsResult = await sql`
+        SELECT COUNT(*) as count
+        FROM users u
+        WHERE u.is_admin = false
+        AND u.is_active = true
+        AND u.employee_type = 'hourly'
+        AND NOT EXISTS (
+          SELECT 1 FROM timesheets t
+          WHERE t.user_id = u.id
+          AND DATE(t.week_start_date) = ${formattedStartDate}::date
+        )
+      `
+
+      if (missingTimesheetsResult && missingTimesheetsResult.length > 0) {
+        missingTimesheets = Number.parseInt(missingTimesheetsResult[0].count, 10) || 0
+      }
+      console.log(`Missing timesheets: ${missingTimesheets}`)
+    } catch (e) {
+      console.error("Error counting missing timesheets:", e)
+    }
+
     // Return the statistics
     return NextResponse.json({
       success: true,
       data: {
         totalEmployees,
+        hourlyEmployees,
         timesheetsCreated,
         timesheetsCertified,
         pendingApproval,
@@ -242,6 +249,7 @@ export async function GET(request: NextRequest) {
         pendingHours,
         submittedHours,
         approvedHours,
+        missingTimesheets,
       },
     })
   } catch (error) {

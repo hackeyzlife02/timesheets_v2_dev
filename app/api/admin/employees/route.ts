@@ -1,50 +1,50 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { sql } from "@/lib/db"
+import { neon } from "@neondatabase/serverless"
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("Fetching employee statistics...")
+    console.log("=== ADMIN EMPLOYEES API CALLED ===")
 
-    let tableColumns = []
+    // Create a fresh SQL client for this request - using the same approach that worked for stats
+    const sql = neon(process.env.DATABASE_URL!)
 
-    try {
-      // First, let's check if the users table exists and what columns it has
-      const tableInfo = await sql`
-        SELECT column_name, data_type 
-        FROM information_schema.columns 
-        WHERE table_name = 'users'
-        ORDER BY ordinal_position
-      `
-
-      if (tableInfo && tableInfo.rows) {
-        tableColumns = tableInfo.rows.map((r) => r.column_name)
-        console.log("Users table columns:", tableColumns)
-      } else {
-        console.log("No table info returned")
-      }
-    } catch (e) {
-      console.error("Error fetching table info:", e)
-    }
-
-    // Get total number of users
+    // Get total users count
     let totalUsers = 0
     try {
-      const totalUsersResult = await sql`
-        SELECT COUNT(*) as count 
-        FROM users
-      `
-
-      if (totalUsersResult && totalUsersResult.rows && totalUsersResult.rows.length > 0) {
-        totalUsers = Number.parseInt(totalUsersResult.rows[0].count || "0", 10)
-        console.log(`Total users: ${totalUsers}`)
-      } else {
-        console.log("No user count result returned")
+      const totalUsersResult = await sql`SELECT COUNT(*) as count FROM users`
+      if (totalUsersResult && totalUsersResult.length > 0) {
+        totalUsers = Number.parseInt(totalUsersResult[0].count, 10) || 0
       }
+      console.log(`Total users: ${totalUsers}`)
     } catch (e) {
-      console.error("Error counting users:", e)
+      console.error("Error counting total users:", e)
     }
 
-    // Get total number of active employees (non-admin users)
+    // Get non-admin users count
+    let nonAdminUsers = 0
+    try {
+      const nonAdminUsersResult = await sql`SELECT COUNT(*) as count FROM users WHERE is_admin = false`
+      if (nonAdminUsersResult && nonAdminUsersResult.length > 0) {
+        nonAdminUsers = Number.parseInt(nonAdminUsersResult[0].count, 10) || 0
+      }
+      console.log(`Non-admin users: ${nonAdminUsers}`)
+    } catch (e) {
+      console.error("Error counting non-admin users:", e)
+    }
+
+    // Get active users count
+    let activeUsers = 0
+    try {
+      const activeUsersResult = await sql`SELECT COUNT(*) as count FROM users WHERE is_active = true`
+      if (activeUsersResult && activeUsersResult.length > 0) {
+        activeUsers = Number.parseInt(activeUsersResult[0].count, 10) || 0
+      }
+      console.log(`Active users: ${activeUsers}`)
+    } catch (e) {
+      console.error("Error counting active users:", e)
+    }
+
+    // Get active employees count (non-admin, active)
     let activeEmployees = 0
     try {
       const activeEmployeesResult = await sql`
@@ -53,67 +53,59 @@ export async function GET(request: NextRequest) {
         WHERE is_admin = false 
         AND is_active = true
       `
-
-      if (activeEmployeesResult && activeEmployeesResult.rows && activeEmployeesResult.rows.length > 0) {
-        activeEmployees = Number.parseInt(activeEmployeesResult.rows[0].count || "0", 10)
-        console.log(`Active employees: ${activeEmployees}`)
-      } else {
-        console.log("No active employees result returned")
+      if (activeEmployeesResult && activeEmployeesResult.length > 0) {
+        activeEmployees = Number.parseInt(activeEmployeesResult[0].count, 10) || 0
       }
+      console.log(`Active employees: ${activeEmployees}`)
     } catch (e) {
       console.error("Error counting active employees:", e)
     }
 
-    // Check if employment_type column exists
-    const hasEmploymentType = tableColumns.includes("employment_type")
-
+    // Get hourly employees count
     let hourlyEmployees = 0
-    let salaryEmployees = 0
-
-    if (hasEmploymentType) {
-      try {
-        // Get hourly employees
-        const hourlyResult = await sql`
-          SELECT COUNT(*) as count 
-          FROM users 
-          WHERE is_admin = false 
-          AND is_active = true
-          AND employment_type = 'hourly'
-        `
-
-        if (hourlyResult && hourlyResult.rows && hourlyResult.rows.length > 0) {
-          hourlyEmployees = Number.parseInt(hourlyResult.rows[0].count || "0", 10)
-        }
-
-        // Get salary employees
-        const salaryResult = await sql`
-          SELECT COUNT(*) as count 
-          FROM users 
-          WHERE is_admin = false 
-          AND is_active = true
-          AND employment_type = 'salary'
-        `
-
-        if (salaryResult && salaryResult.rows && salaryResult.rows.length > 0) {
-          salaryEmployees = Number.parseInt(salaryResult.rows[0].count || "0", 10)
-        }
-      } catch (e) {
-        console.error("Error counting employment types:", e)
+    try {
+      const hourlyEmployeesResult = await sql`
+        SELECT COUNT(*) as count 
+        FROM users 
+        WHERE is_admin = false 
+        AND is_active = true 
+        AND employee_type = 'hourly'
+      `
+      if (hourlyEmployeesResult && hourlyEmployeesResult.length > 0) {
+        hourlyEmployees = Number.parseInt(hourlyEmployeesResult[0].count, 10) || 0
       }
-    } else {
-      console.log("employment_type column not found in users table")
+      console.log(`Hourly employees: ${hourlyEmployees}`)
+    } catch (e) {
+      console.error("Error counting hourly employees:", e)
     }
 
-    // Return the statistics
+    // Get salary employees count
+    let salaryEmployees = 0
+    try {
+      const salaryEmployeesResult = await sql`
+        SELECT COUNT(*) as count 
+        FROM users 
+        WHERE is_admin = false 
+        AND is_active = true 
+        AND employee_type = 'salary'
+      `
+      if (salaryEmployeesResult && salaryEmployeesResult.length > 0) {
+        salaryEmployees = Number.parseInt(salaryEmployeesResult[0].count, 10) || 0
+      }
+      console.log(`Salary employees: ${salaryEmployees}`)
+    } catch (e) {
+      console.error("Error counting salary employees:", e)
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         totalUsers,
+        nonAdminUsers,
+        activeUsers,
         activeEmployees,
         hourlyEmployees,
         salaryEmployees,
-        hasEmploymentTypeColumn: hasEmploymentType,
-        tableColumns,
       },
     })
   } catch (error) {
@@ -122,7 +114,6 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         message: "Failed to fetch employee statistics: " + (error instanceof Error ? error.message : String(error)),
-        error: error instanceof Error ? error.stack : String(error),
       },
       { status: 500 },
     )

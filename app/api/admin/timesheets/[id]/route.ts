@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         AND column_name = 'admin_approved'
       `
 
-      adminApprovedExists = checkColumn.rows && checkColumn.rows.length > 0
+      adminApprovedExists = checkColumn && checkColumn.length > 0
       console.log(`admin_approved column exists: ${adminApprovedExists}`)
     } catch (error) {
       console.error("Error checking for admin_approved column:", error)
@@ -35,8 +35,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         AND column_name IN ('employee_type', 'weekly_salary')
       `
 
-      if (checkColumns && checkColumns.rows) {
-        for (const row of checkColumns.rows) {
+      if (checkColumns && checkColumns.length > 0) {
+        for (const row of checkColumns) {
           if (row.column_name === "employee_type") employeeTypeExists = true
           if (row.column_name === "weekly_salary") weeklySalaryExists = true
         }
@@ -144,12 +144,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     const timesheetResult = await query
+    console.log("Timesheet query result:", timesheetResult)
 
-    if (!timesheetResult.rows || timesheetResult.rows.length === 0) {
+    if (!timesheetResult || timesheetResult.length === 0) {
       return NextResponse.json({ success: false, message: "Timesheet not found" }, { status: 404 })
     }
 
-    const timesheet = timesheetResult.rows[0]
+    const timesheet = timesheetResult[0]
 
     // Get the timesheet days
     const daysResult = await sql`
@@ -176,27 +177,31 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       WHERE timesheet_id = ${id}
     `
 
+    console.log("Days query result:", daysResult)
+
     // Convert days array to object with day names as keys
     const days: { [key: string]: any } = {}
 
-    for (const day of daysResult.rows) {
-      days[day.dayName] = {
-        didNotWork: day.didNotWork,
-        timeIn: day.timeIn || "",
-        timeOut: day.timeOut || "",
-        mealBreakStart: day.mealBreakStart || "",
-        mealBreakEnd: day.mealBreakEnd || "",
-        amBreakStart: day.amBreakStart || "",
-        amBreakEnd: day.amBreakEnd || "",
-        pmBreakStart: day.pmBreakStart || "",
-        pmBreakEnd: day.pmBreakEnd || "",
-        outOfTownHours: day.outOfTownHours || 0,
-        outOfTownMinutes: day.outOfTownMinutes || 0,
-        reasons: day.reasons || "",
-        totalRegularHours: day.totalRegularHours || 0,
-        totalOvertimeHours: day.totalOvertimeHours || 0,
-        totalDoubleTimeHours: day.totalDoubleTimeHours || 0,
-        isSeventhConsecutiveDay: day.isSeventhConsecutiveDay || false,
+    if (daysResult && daysResult.length > 0) {
+      for (const day of daysResult) {
+        days[day.dayName] = {
+          didNotWork: day.didNotWork,
+          timeIn: day.timeIn || "",
+          timeOut: day.timeOut || "",
+          mealBreakStart: day.mealBreakStart || "",
+          mealBreakEnd: day.mealBreakEnd || "",
+          amBreakStart: day.amBreakStart || "",
+          amBreakEnd: day.amBreakEnd || "",
+          pmBreakStart: day.pmBreakStart || "",
+          pmBreakEnd: day.pmBreakEnd || "",
+          outOfTownHours: day.outOfTownHours || 0,
+          outOfTownMinutes: day.outOfTownMinutes || 0,
+          reasons: day.reasons || "",
+          totalRegularHours: day.totalRegularHours || 0,
+          totalOvertimeHours: day.totalOvertimeHours || 0,
+          totalDoubleTimeHours: day.totalDoubleTimeHours || 0,
+          isSeventhConsecutiveDay: day.isSeventhConsecutiveDay || false,
+        }
       }
     }
 

@@ -48,10 +48,18 @@ export default function AdminTimesheetDetailsPage() {
       setLoading(true)
       setError(null)
 
+      console.log(`Fetching timesheet with ID: ${timesheetId}`)
       const response = await fetch(`/api/admin/timesheets/${timesheetId}`)
 
       if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`)
+        const errorText = await response.text()
+        console.error(`Error response (${response.status}):`, errorText)
+
+        if (response.status === 404) {
+          throw new Error(`Timesheet with ID ${timesheetId} not found`)
+        } else {
+          throw new Error(`HTTP error! Status: ${response.status}`)
+        }
       }
 
       const data = await response.json()

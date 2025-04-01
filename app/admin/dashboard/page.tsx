@@ -8,7 +8,7 @@ import { getCurrentUser, isAuthenticated, isAdmin } from "@/lib/auth"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { DashboardNav } from "@/components/dashboard-nav"
 import { WeeklySubmissionStats } from "@/components/weekly-submission-stats"
-import { DebugPanel } from "@/components/debug-panel"
+import { EnhancedDebugPanel } from "@/components/enhanced-debug-panel"
 import { Loader2, Calendar, Users, ClipboardCheck, Clock } from "lucide-react"
 
 export default function AdminDashboard() {
@@ -30,6 +30,10 @@ export default function AdminDashboard() {
     const monday = new Date(now)
     monday.setDate(now.getDate() - daysToSubtract)
     monday.setHours(0, 0, 0, 0)
+
+    // Log the calculated Monday date for debugging
+    console.log("Calculated Monday date:", monday.toISOString())
+
     return monday
   }
 
@@ -70,6 +74,7 @@ export default function AdminDashboard() {
       }
 
       console.log(`Fetching stats for date: ${formattedDate}`)
+      console.log(`Date object: ${date.toISOString()}`)
 
       const startTime = performance.now()
       const response = await fetch(apiUrl)
@@ -355,8 +360,13 @@ export default function AdminDashboard() {
               </Card>
             </div>
 
-            {/* Debug Panel */}
-            <DebugPanel debugData={debugData} />
+            {/* Enhanced Debug Panel */}
+            <EnhancedDebugPanel
+              debugData={debugData}
+              selectedWeekStartDate={weekStartDate}
+              submissionStats={submissionStats}
+              employeeStats={employeeStats}
+            />
           </div>
         </main>
       </div>

@@ -1,12 +1,10 @@
 import { neon } from "@neondatabase/serverless"
-import { drizzle } from "drizzle-orm/neon-http"
 
-// Initialize the SQL client with the DATABASE_URL environment variable
-const sql = neon(process.env.DATABASE_URL!)
+// Create a SQL client with the connection string from environment variables
+export const sql = neon(process.env.DATABASE_URL!)
 
-// Initialize the Drizzle ORM instance
-export const db = drizzle(sql)
-
-// Export the raw SQL client for direct queries when needed
-export { sql }
+// Export a function to create a fresh SQL client for each request
+export function createFreshSqlClient() {
+  return neon(process.env.DATABASE_URL!)
+}
 

@@ -85,8 +85,11 @@
     "@neondatabase/serverless": "latest",
     "@cloudflare/workers-types": "latest",
     "@op-engineering/op-sqlite": "latest",
+    "@auth/core": "latest",
+    "nodemailer": "latest",
     "drizzle-orm": "latest",
-    "bcryptjs": "latest"
+    "bcryptjs": "latest",
+    "next-auth": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

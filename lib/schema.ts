@@ -31,6 +31,14 @@ export const timesheets = pgTable("timesheets", {
   totalRegularHours: decimal("total_regular_hours", { precision: 5, scale: 2 }).default("0").notNull(),
   totalOvertimeHours: decimal("total_overtime_hours", { precision: 5, scale: 2 }).default("0").notNull(),
   totalDoubleTimeHours: decimal("total_double_time_hours", { precision: 5, scale: 2 }).default("0").notNull(),
+  sfHours: decimal("sf_hours", { precision: 5, scale: 2 }).default("0").notNull(),
+  outOfTownHours: decimal("out_of_town_hours", { precision: 5, scale: 2 }).default("0").notNull(),
+  sickHours: decimal("sick_hours", { precision: 5, scale: 2 }).default("0").notNull(),
+  holidayHours: decimal("holiday_hours", { precision: 5, scale: 2 }).default("0").notNull(),
+  vacationHours: decimal("vacation_hours", { precision: 5, scale: 2 }).default("0").notNull(),
+  adminNotes: text("admin_notes"),
+  weeklySalary: decimal("weekly_salary", { precision: 10, scale: 2 }).default("0").notNull(),
+  isSalaried: boolean("is_salaried").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 })
@@ -58,5 +66,19 @@ export const timesheetDays = pgTable("timesheet_days", {
   totalOvertimeHours: decimal("total_overtime_hours", { precision: 5, scale: 2 }).default("0").notNull(),
   totalDoubleTimeHours: decimal("total_double_time_hours", { precision: 5, scale: 2 }).default("0").notNull(),
   isSeventhConsecutiveDay: boolean("is_seventh_consecutive_day").default(false).notNull(),
+  location: varchar("location", { length: 20 }).default("sf").notNull(),
+  timeOffType: varchar("time_off_type", { length: 20 }),
+  dailySalary: decimal("daily_salary", { precision: 10, scale: 2 }).default("0").notNull(),
+})
+
+// Audit Logs table
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
+  action: varchar("action", { length: 50 }).notNull(),
+  entityType: varchar("entity_type", { length: 50 }).notNull(),
+  entityId: integer("entity_id").notNull(),
+  details: text("details"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 })
 

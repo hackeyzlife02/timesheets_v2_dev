@@ -3,21 +3,28 @@
 import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { ChevronUp, ChevronDown } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
+// Update the props interface to include a save function
 interface WeeklyTotalsBannerProps {
   regularHours: number
   overtimeHours: number
   doubleTimeHours: number
   totalHours: number
-  daysWorked?: number // Add days worked prop
+  daysWorked?: number
+  onSave?: () => void // Add this prop for the save function
+  isSaving?: boolean // Add this prop to show saving state
 }
 
+// Update the component to accept and use these new props
 export function WeeklyTotalsBanner({
   regularHours,
   overtimeHours,
   doubleTimeHours,
   totalHours,
-  daysWorked = 0, // Default to 0 if not provided
+  daysWorked = 0,
+  onSave,
+  isSaving = false,
 }: WeeklyTotalsBannerProps) {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -67,8 +74,8 @@ export function WeeklyTotalsBanner({
         </div>
 
         {/* Collapsed view - compact summary */}
-        <div className="flex items-center justify-between px-4 h-12 cursor-pointer" onClick={toggleExpanded}>
-          <div className="flex items-center space-x-4">
+        <div className="flex items-center justify-between px-4 h-12">
+          <div className="flex items-center space-x-4 cursor-pointer" onClick={toggleExpanded}>
             <div className="flex flex-col">
               <span className="text-xs text-muted-foreground">Days Worked</span>
               <span className="text-sm font-medium">{daysWorked}</span>
@@ -81,11 +88,27 @@ export function WeeklyTotalsBanner({
               <span className="text-xs text-muted-foreground">OT (1.5x)</span>
               <span className="text-sm font-medium text-amber-600">{overtimeHours.toFixed(2)}</span>
             </div>
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground ml-2" />
+            ) : (
+              <ChevronUp className="h-4 w-4 text-muted-foreground ml-2" />
+            )}
           </div>
-          {isExpanded ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+
+          {/* Add Save Progress button */}
+          {onSave && (
+            <Button
+              onClick={(e) => {
+                e.stopPropagation()
+                onSave()
+              }}
+              size="sm"
+              variant="outline"
+              disabled={isSaving}
+              className="ml-auto"
+            >
+              {isSaving ? "Saving..." : "Save Progress"}
+            </Button>
           )}
         </div>
 

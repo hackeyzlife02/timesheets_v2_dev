@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Calendar, ClipboardList, Clock, FileText, Home, Settings, Users, Database } from "lucide-react"
+import { Clock, FileText, Home, Users, Database, AlertTriangle, CalendarPlus, ClipboardCheck } from "lucide-react"
 
 interface DashboardNavProps {
   userRole: "employee" | "admin"
@@ -14,81 +14,80 @@ export function DashboardNav({ userRole }: DashboardNavProps) {
 
   const employeeLinks = [
     {
-      title: "Dashboard",
       href: "/employee/dashboard",
       icon: Home,
+      title: "Dashboard",
     },
     {
-      title: "Timesheets",
-      href: "/employee/timesheets",
-      icon: ClipboardList,
-    },
-    {
+      href: "/employee/timesheet/select-week",
+      icon: CalendarPlus,
       title: "New Timesheet",
-      href: "/employee/timesheet/new",
-      icon: Clock,
     },
     {
-      title: "History",
-      href: "/employee/history",
-      icon: Calendar,
+      href: "/employee/timesheets",
+      icon: FileText,
+      title: "My Timesheets",
     },
   ]
 
   const adminLinks = [
     {
-      title: "Dashboard",
       href: "/admin/dashboard",
       icon: Home,
+      title: "Dashboard",
     },
     {
-      title: "Approvals",
       href: "/admin/approvals",
-      icon: ClipboardList,
+      icon: Clock,
+      title: "Approvals",
     },
     {
-      title: "Reports",
-      href: "/admin/reports",
-      icon: FileText,
-    },
-    {
-      title: "Users",
       href: "/admin/users",
       icon: Users,
+      title: "Users",
     },
     {
-      title: "Database",
+      href: "/admin/missing-timesheets",
+      icon: AlertTriangle,
+      title: "Missing Timesheets",
+    },
+    {
+      href: "/admin/timesheet-review",
+      icon: ClipboardCheck,
+      title: "Timesheet Review",
+    },
+    {
       href: "/admin/database",
       icon: Database,
-    },
-    {
-      title: "Settings",
-      href: "/admin/settings",
-      icon: Settings,
+      title: "Database",
     },
   ]
 
   const links = userRole === "admin" ? adminLinks : employeeLinks
 
   return (
-    <nav className="hidden w-56 flex-col border-r bg-muted/40 md:flex">
-      <div className="flex flex-col gap-2 p-4">
-        {links.map((link) => {
-          const Icon = link.icon
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted",
-                pathname === link.href ? "bg-muted" : "transparent",
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {link.title}
-            </Link>
-          )
-        })}
+    <nav className="w-64 border-r bg-muted/20 h-full">
+      <div className="space-y-4 py-4">
+        <div className="px-3 py-2">
+          <div className="space-y-1">
+            <h2 className="mb-2 px-4 text-xl font-semibold tracking-tight">Navigation</h2>
+            {links.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={cn(
+                  "flex items-center rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                  pathname === link.href
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <link.icon className="mr-2 h-4 w-4" />
+                <span>{link.title}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
     </nav>
   )

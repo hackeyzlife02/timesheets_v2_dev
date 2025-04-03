@@ -144,7 +144,7 @@ export default function TimesheetsPage() {
                   <RefreshCw className="mr-2 h-4 w-4" />
                   Refresh
                 </Button>
-                <Button onClick={() => router.push("/employee/timesheet/new")}>Create New Timesheet</Button>
+                <Button onClick={() => router.push("/employee/timesheet/select-week")}>Create New Timesheet</Button>
               </div>
             </div>
 

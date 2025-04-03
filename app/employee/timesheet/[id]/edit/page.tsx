@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { useEffect, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -23,6 +21,7 @@ import {
 } from "@/lib/timesheet"
 import { useToast } from "@/hooks/use-toast"
 import { BreakTimeEntry } from "@/components/break-time-entry"
+import { SaveIcon, CheckCircleIcon, XCircleIcon } from "lucide-react"
 
 // Import the WeeklyTotalsBanner component at the top of the file
 import { WeeklyTotalsBanner } from "@/components/weekly-totals-banner"
@@ -55,14 +54,13 @@ export default function EditTimesheet() {
   const [weekDays, setWeekDays] = useState<any[]>([])
   const [timesheetData, setTimesheetData] = useState<{ [key: string]: DayEntry }>({})
   const [expandedDay, setExpandedDay] = useState<string | null>(null)
-  const [isCertified, setIsCertified] = useState(false)
   const [validationErrors, setValidationErrors] = useState<{ [key: string]: string[] }>({})
   const [weeklyTotals, setWeeklyTotals] = useState({
     regular: 0,
     overtime: 0,
     doubleTime: 0,
     total: 0,
-    daysWorked: 0, // Add days worked
+    daysWorked: 0,
   })
   const [calculatedHours, setCalculatedHours] = useState<{
     [key: string]: {
@@ -73,6 +71,12 @@ export default function EditTimesheet() {
   }>({})
 
   const { toast } = useToast()
+
+  // Add a new state to track which days have visible comments
+  const [visibleComments, setVisibleComments] = useState<{ [key: string]: boolean }>({})
+
+  // Add a new state to track saving status
+  const [isSaving, setIsSaving] = useState(false)
 
   // Helper function to get day name
   function getDayName(date: Date) {
@@ -124,9 +128,6 @@ export default function EditTimesheet() {
         // Initialize week days
         const days = getWeekDays(startDate)
         setWeekDays(days)
-
-        // Set certification status
-        setIsCertified(data.certified || false)
 
         // Initialize timesheet data from fetched data
         if (data.days) {
@@ -235,6 +236,9 @@ export default function EditTimesheet() {
       }
     }
 
+    // Update calculated hours
+    setCalculatedHours(dayHours)
+
     // Update weekly totals without updating timesheetData
     setWeeklyTotals({
       regular: Number.parseFloat(totalRegular.toFixed(2)),
@@ -275,7 +279,8 @@ export default function EditTimesheet() {
   const getBreakDuration = (startTime: string, endTime: string): number => {
     if (!startTime || !endTime) return 0
     const duration = calculateBreakDuration(startTime, endTime)
-    return Math.round(duration * 60) // Convert hours to minutes
+    // Remove the multiplication by 60 since calculateBreakDuration already returns minutes
+    return duration
   }
 
   // Check if a reason is required for not working
@@ -301,19 +306,27 @@ export default function EditTimesheet() {
     )
   }
 
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // Add a function to toggle comment visibility for a specific day
+  const toggleCommentVisibility = (day: string) => {
+    setVisibleComments((prev) => ({
+      ...prev,
+      [day.toLowerCase()]: !prev[day.toLowerCase()],
+    }))
+  }
 
+  // Add a function to save progress without submitting the form
+  const saveProgress = async () => {
     // Check for validation errors
     if (Object.keys(validationErrors).length > 0) {
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: "Please fix the validation errors before submitting.",
+        description: "Please fix the validation errors before saving.",
       })
       return
     }
+
+    setIsSaving(true)
 
     // Create a copy of timesheet data with calculated hours
     const submissionData = Object.entries(timesheetData).reduce(
@@ -336,8 +349,8 @@ export default function EditTimesheet() {
         id: Number.parseInt(timesheetId),
         userId: user?.id,
         weekStartDate: weekStartDate.toISOString(),
-        status: isCertified ? "certified" : "draft",
-        certified: isCertified,
+        status: "draft", // Always save as draft
+        certified: false, // Not certified when saving progress
         days: submissionData,
         totalRegularHours: weeklyTotals.regular,
         totalOvertimeHours: weeklyTotals.overtime,
@@ -359,36 +372,44 @@ export default function EditTimesheet() {
         toast({
           variant: "destructive",
           title: "Error",
-          description: result.message || "Failed to update timesheet",
+          description: result.message || "Failed to save progress",
         })
         return
       }
 
       // Show success message
-      if (isCertified) {
-        toast({
-          title: "Success",
-          description: "Timesheet certified successfully!",
-          variant: "success",
-        })
-        // Redirect to timesheets list for certified timesheets
-        router.push("/employee/timesheets")
-      } else {
-        toast({
-          title: "Success",
-          description: "Timesheet saved as draft.",
-        })
-        // Redirect to dashboard for saved drafts
-        router.push("/employee/dashboard")
-      }
+      toast({
+        title: "Success",
+        description: "Progress saved successfully.",
+      })
     } catch (error) {
-      console.error("Error updating timesheet:", error)
+      console.error("Error saving progress:", error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "An error occurred while updating the timesheet. Please try again.",
+        description: "An error occurred while saving progress. Please try again.",
       })
+    } finally {
+      setIsSaving(false)
     }
+  }
+
+  // Function to proceed to review page
+  const proceedToReview = () => {
+    // Check for validation errors
+    if (Object.keys(validationErrors).length > 0) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please fix the validation errors before submitting for approval.",
+      })
+      return
+    }
+
+    // Save progress first, then redirect to review page
+    saveProgress().then(() => {
+      router.push(`/employee/timesheet/${timesheetId}/review`)
+    })
   }
 
   if (loading) {
@@ -403,14 +424,18 @@ export default function EditTimesheet() {
         <DashboardNav userRole="employee" />
 
         <main className="flex-1 p-6 pb-16">
-          {" "}
-          {/* Add pb-16 to ensure content doesn't get hidden behind the banner */}
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <h1 className="text-3xl font-bold">Edit Timesheet</h1>
-              <div className="flex items-center gap-2">
-                <Label>Week Starting: {weekStartDate.toLocaleDateString()}</Label>
+              <div>
+                <h1 className="text-3xl font-bold">Edit Timesheet</h1>
+                <p className="text-muted-foreground">Week Starting: {weekStartDate.toLocaleDateString()}</p>
               </div>
+
+              {/* Add Submit for Approval button */}
+              <Button onClick={proceedToReview} className="bg-green-600 hover:bg-green-700 text-white">
+                <CheckCircleIcon className="mr-2 h-4 w-4" />
+                Submit for Approval
+              </Button>
             </div>
 
             <div className="bg-muted/30 p-4 rounded-lg">
@@ -434,7 +459,28 @@ export default function EditTimesheet() {
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Add Save Progress and Cancel buttons */}
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium">{weeklyTotals.daysWorked}</span> days worked this week
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/employee/dashboard")}
+                  className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                >
+                  <XCircleIcon className="mr-2 h-4 w-4" />
+                  Cancel
+                </Button>
+                <Button onClick={saveProgress} disabled={isSaving} className="bg-blue-600 hover:bg-blue-700 text-white">
+                  <SaveIcon className="mr-2 h-4 w-4" />
+                  {isSaving ? "Saving..." : "Save Progress"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-6">
               {weekDays.map((day) => (
                 <Card key={day.name} className="overflow-hidden">
                   <CardHeader className="cursor-pointer bg-muted/20 py-3" onClick={() => toggleDayExpansion(day.name)}>
@@ -619,73 +665,68 @@ export default function EditTimesheet() {
                         )}
 
                         <div className="space-y-2 border-t pt-4">
-                          <Label
-                            htmlFor={`${day.name.toLowerCase()}-reasons`}
-                            className={isReasonRequired(day.name) ? "text-red-500 font-medium" : ""}
-                          >
-                            {timesheetData[day.name.toLowerCase()]?.didNotWork
-                              ? isReasonRequiredForNotWorking(day.name)
-                                ? "Reason for not working (required)"
-                                : "Reason for not working (optional)"
-                              : isWeekend(day.name) && !timesheetData[day.name.toLowerCase()]?.didNotWork
-                                ? "Reason for weekend work (required)"
-                                : (calculatedHours[day.name.toLowerCase()]?.overtime || 0) > 0 ||
-                                    (calculatedHours[day.name.toLowerCase()]?.doubleTime || 0) > 0
-                                  ? "Reason for overtime/double time (required)"
-                                  : "Notes (optional)"}
-                          </Label>
-                          <Textarea
-                            id={`${day.name.toLowerCase()}-reasons`}
-                            value={timesheetData[day.name.toLowerCase()]?.reasons || ""}
-                            onChange={(e) => handleDayInputChange(day.name, "reasons", e.target.value)}
-                            placeholder="Enter any additional information here..."
-                            required={isReasonRequired(day.name)}
-                          />
+                          <div className="flex items-center justify-between mb-2">
+                            <Label
+                              htmlFor={`${day.name.toLowerCase()}-reasons`}
+                              className={isReasonRequired(day.name) ? "text-red-500 font-medium" : ""}
+                            >
+                              {timesheetData[day.name.toLowerCase()]?.didNotWork
+                                ? isReasonRequiredForNotWorking(day.name)
+                                  ? "Reason for not working (required)"
+                                  : "Reason for not working (optional)"
+                                : isWeekend(day.name) && !timesheetData[day.name.toLowerCase()]?.didNotWork
+                                  ? "Reason for weekend work (required)"
+                                  : (calculatedHours[day.name.toLowerCase()]?.overtime || 0) > 0 ||
+                                      (calculatedHours[day.name.toLowerCase()]?.doubleTime || 0) > 0
+                                    ? "Reason for overtime/double time (required)"
+                                    : "Comments (optional)"}
+                            </Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleCommentVisibility(day.name)
+                              }}
+                            >
+                              {visibleComments[day.name.toLowerCase()] ? "Hide Comments" : "Add Comments"}
+                            </Button>
+                          </div>
+
+                          {/* Show textarea if comments are visible or if they're required */}
+                          {(visibleComments[day.name.toLowerCase()] ||
+                            isReasonRequired(day.name) ||
+                            (timesheetData[day.name.toLowerCase()]?.reasons &&
+                              timesheetData[day.name.toLowerCase()]?.reasons.trim() !== "")) && (
+                            <Textarea
+                              id={`${day.name.toLowerCase()}-reasons`}
+                              value={timesheetData[day.name.toLowerCase()]?.reasons || ""}
+                              onChange={(e) => handleDayInputChange(day.name, "reasons", e.target.value)}
+                              placeholder="Enter any additional information here..."
+                              required={isReasonRequired(day.name)}
+                            />
+                          )}
                         </div>
                       </div>
                     </CardContent>
                   )}
                 </Card>
               ))}
-
-              <Card>
-                <CardContent className="p-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="certify-checkbox"
-                        checked={isCertified}
-                        onCheckedChange={(checked) => setIsCertified(checked === true)}
-                      />
-                      <Label htmlFor="certify-checkbox" className="text-sm text-muted-foreground">
-                        I certify that the hours reported in this timesheet are true and complete to the best of my
-                        knowledge, and I have not falsified or omitted any work hours. I understand that any
-                        misrepresentation may result in disciplinary action and legal consequences in accordance with
-                        applicable San Francisco and California labor laws.
-                      </Label>
-                    </div>
-
-                    <div className="flex justify-end gap-4">
-                      <Button type="button" variant="outline" onClick={() => router.push("/employee/dashboard")}>
-                        Cancel
-                      </Button>
-                      <Button type="submit">{isCertified ? "Certify Timesheet" : "Save Progress"}</Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </form>
+            </div>
           </div>
         </main>
       </div>
 
-      {/* Move the banner outside the flex container but inside the main wrapper */}
+      {/* Keep the banner for quick saving */}
       <WeeklyTotalsBanner
         regularHours={weeklyTotals.regular}
         overtimeHours={weeklyTotals.overtime}
         doubleTimeHours={weeklyTotals.doubleTime}
         totalHours={weeklyTotals.total}
-        daysWorked={weeklyTotals.daysWorked} // Pass days worked
+        daysWorked={weeklyTotals.daysWorked}
+        onSave={saveProgress}
+        isSaving={isSaving}
       />
     </div>
   )

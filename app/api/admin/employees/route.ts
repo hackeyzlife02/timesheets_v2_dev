@@ -1,119 +1,59 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
+import { getCurrentUser, isAdmin } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
   try {
     console.log("=== ADMIN EMPLOYEES API CALLED ===")
 
-    // Create a fresh SQL client for this request - using the same approach that worked for stats
+    // Check if user is admin
+    const currentUser = getCurrentUser()
+    if (!currentUser || !isAdmin()) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
+    }
+
+    // Create a fresh SQL client for this request
     const sql = neon(process.env.DATABASE_URL!)
 
-    // Get total users count
-    let totalUsers = 0
-    try {
-      const totalUsersResult = await sql`SELECT COUNT(*) as count FROM users`
-      if (totalUsersResult && totalUsersResult.length > 0) {
-        totalUsers = Number.parseInt(totalUsersResult[0].count, 10) || 0
-      }
-      console.log(`Total users: ${totalUsers}`)
-    } catch (e) {
-      console.error("Error counting total users:", e)
+    // Get query parameters
+    const url = new URL(request.url)
+    const employeeType = url.searchParams.get("type")
+
+    // Build the query based on the employee type filter
+    let query = `
+      SELECT 
+        id, 
+        username, 
+        full_name, 
+        email, 
+        is_admin, 
+        is_active, 
+        employee_type,
+        weekly_salary
+      FROM users 
+      WHERE is_admin = false 
+      AND is_active = true
+    `
+
+    if (employeeType) {
+      query += ` AND employee_type = '${employeeType}'`
     }
 
-    // Get non-admin users count
-    let nonAdminUsers = 0
-    try {
-      const nonAdminUsersResult = await sql`SELECT COUNT(*) as count FROM users WHERE is_admin = false`
-      if (nonAdminUsersResult && nonAdminUsersResult.length > 0) {
-        nonAdminUsers = Number.parseInt(nonAdminUsersResult[0].count, 10) || 0
-      }
-      console.log(`Non-admin users: ${nonAdminUsers}`)
-    } catch (e) {
-      console.error("Error counting non-admin users:", e)
-    }
+    query += ` ORDER BY full_name`
 
-    // Get active users count
-    let activeUsers = 0
-    try {
-      const activeUsersResult = await sql`SELECT COUNT(*) as count FROM users WHERE is_active = true`
-      if (activeUsersResult && activeUsersResult.length > 0) {
-        activeUsers = Number.parseInt(activeUsersResult[0].count, 10) || 0
-      }
-      console.log(`Active users: ${activeUsers}`)
-    } catch (e) {
-      console.error("Error counting active users:", e)
-    }
-
-    // Get active employees count (non-admin, active)
-    let activeEmployees = 0
-    try {
-      const activeEmployeesResult = await sql`
-        SELECT COUNT(*) as count 
-        FROM users 
-        WHERE is_admin = false 
-        AND is_active = true
-      `
-      if (activeEmployeesResult && activeEmployeesResult.length > 0) {
-        activeEmployees = Number.parseInt(activeEmployeesResult[0].count, 10) || 0
-      }
-      console.log(`Active employees: ${activeEmployees}`)
-    } catch (e) {
-      console.error("Error counting active employees:", e)
-    }
-
-    // Get hourly employees count
-    let hourlyEmployees = 0
-    try {
-      const hourlyEmployeesResult = await sql`
-        SELECT COUNT(*) as count 
-        FROM users 
-        WHERE is_admin = false 
-        AND is_active = true 
-        AND employee_type = 'hourly'
-      `
-      if (hourlyEmployeesResult && hourlyEmployeesResult.length > 0) {
-        hourlyEmployees = Number.parseInt(hourlyEmployeesResult[0].count, 10) || 0
-      }
-      console.log(`Hourly employees: ${hourlyEmployees}`)
-    } catch (e) {
-      console.error("Error counting hourly employees:", e)
-    }
-
-    // Get salary employees count
-    let salaryEmployees = 0
-    try {
-      const salaryEmployeesResult = await sql`
-        SELECT COUNT(*) as count 
-        FROM users 
-        WHERE is_admin = false 
-        AND is_active = true 
-        AND employee_type = 'salary'
-      `
-      if (salaryEmployeesResult && salaryEmployeesResult.length > 0) {
-        salaryEmployees = Number.parseInt(salaryEmployeesResult[0].count, 10) || 0
-      }
-      console.log(`Salary employees: ${salaryEmployees}`)
-    } catch (e) {
-      console.error("Error counting salary employees:", e)
-    }
+    const employees = await sql.unsafe(query)
+    console.log(`Found ${employees.length} employees${employeeType ? ` with type ${employeeType}` : ""}`)
 
     return NextResponse.json({
       success: true,
-      data: {
-        totalUsers,
-        nonAdminUsers,
-        activeUsers,
-        activeEmployees,
-        hourlyEmployees,
-        salaryEmployees,
-      },
+      data: employees,
     })
   } catch (error) {
-    console.error("Error fetching employee statistics:", error)
+    console.error("Error fetching employees:", error)
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to fetch employee statistics: " + (error instanceof Error ? error.message : String(error)),
+        message: "Failed to fetch employees: " + (error instanceof Error ? error.message : String(error)),
       },
       { status: 500 },
     )

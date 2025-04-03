@@ -3,164 +3,163 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { DashboardNav } from "@/components/dashboard-nav"
-import { Loader2, Clock, FileEdit, AlertCircle } from "lucide-react"
+import { CalendarPlus, FileText, Clock, Calendar, AlertCircle } from "lucide-react"
 
 export default function EmployeeDashboard() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
   const [activeTimesheet, setActiveTimesheet] = useState<any>(null)
-  const [pendingTimesheets, setPendingTimesheets] = useState<any[]>([])
-  const [recentActivity, setRecentActivity] = useState<any[]>([])
-  const [loading, setLoading] = useState<boolean>(true)
-  const [error, setError] = useState<string | null>(null)
+  const [currentWeek, setCurrentWeek] = useState<any>(null)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
 
   useEffect(() => {
     // Check if user is authenticated
     if (!isAuthenticated()) {
-      console.log("User not authenticated, redirecting to login")
       router.push("/login")
       return
     }
 
     // Get current user
     const currentUser = getCurrentUser()
-    console.log("Current user in employee dashboard:", currentUser)
-
-    // If user is admin, redirect to admin dashboard
-    if (currentUser && currentUser.isAdmin) {
-      console.log("User is admin, redirecting to admin dashboard")
-      router.push("/admin/dashboard")
-      return
-    }
-
     setUser(currentUser)
 
-    // Fetch timesheets
-    const fetchTimesheets = async () => {
-      try {
-        console.log("Fetching timesheets for user:", currentUser?.id)
-        const response = await fetch(`/api/timesheets?userId=${currentUser?.id}`)
+    // Calculate current week dates client-side
+    calculateCurrentWeek()
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`)
-        }
-
-        const data = await response.json()
-        console.log("Timesheets response:", data)
-
-        if (!data.success) {
-          console.error("Error fetching timesheets:", data.message)
-          setError(data.message || "Failed to fetch timesheets")
-          setLoading(false)
-          return
-        }
-
-        const timesheets = data.data || []
-
-        // Find active timesheet (draft for current week)
-        const now = new Date()
-        // Calculate days to subtract to get to Monday
-        const day = now.getDay() // 0 = Sunday, 1 = Monday, etc.
-        const daysToSubtract = day === 0 ? 6 : day - 1
-        const startOfWeek = new Date(now)
-        startOfWeek.setDate(now.getDate() - daysToSubtract)
-        startOfWeek.setHours(0, 0, 0, 0)
-
-        const endOfWeek = new Date(startOfWeek)
-        endOfWeek.setDate(startOfWeek.getDate() + 7)
-
-        console.log(`Looking for timesheets between ${startOfWeek.toISOString()} and ${endOfWeek.toISOString()}`)
-
-        // Find active timesheet (any drafts)
-        const active = timesheets.find((t: any) => {
-          // First check if it's a draft
-          return t.status === "draft"
-        })
-        console.log("Active timesheet found:", active)
-        setActiveTimesheet(active || null)
-
-        // Find pending timesheets (submitted but not certified)
-        const pending = timesheets.filter((t: any) => t.status === "submitted")
-        setPendingTimesheets(pending)
-
-        // Get recent activity
-        const recent = [...timesheets]
-          .sort((a: any, b: any) => {
-            const dateA = a.submissionDate ? new Date(a.submissionDate) : new Date(0)
-            const dateB = b.submissionDate ? new Date(b.submissionDate) : new Date(0)
-            return dateB.getTime() - dateA.getTime()
-          })
-          .slice(0, 3)
-
-        setRecentActivity(recent)
-      } catch (error) {
-        console.error("Error fetching timesheets:", error)
-        setError("Failed to fetch timesheets: " + (error instanceof Error ? error.message : String(error)))
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchTimesheets()
+    // Fetch active timesheet
+    fetchActiveTimesheet(currentUser?.id)
   }, [router])
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen flex-col">
-        <DashboardHeader user={user} />
-        <div className="flex flex-1">
-          <DashboardNav userRole="employee" />
-          <main className="flex-1 p-6 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-2">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p>Loading dashboard...</p>
-            </div>
-          </main>
-        </div>
-      </div>
-    )
+  // Calculate current week dates in the client's timezone
+  const calculateCurrentWeek = () => {
+    const now = new Date()
+    const currentDay = now.getDay() // 0 = Sunday, 1 = Monday, etc.
+    const daysToMonday = currentDay === 0 ? 6 : currentDay - 1 // If Sunday, go back 6 days to previous Monday
+
+    // Calculate Monday (start of week)
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - daysToMonday)
+    monday.setHours(0, 0, 0, 0)
+
+    // Calculate Sunday (end of week)
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    sunday.setHours(23, 59, 59, 999)
+
+    // Calculate week number
+    const startOfYear = new Date(monday.getFullYear(), 0, 1)
+    const days = Math.floor((monday.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000))
+    const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7)
+
+    setCurrentWeek({
+      weekStartDate: monday,
+      weekEndDate: sunday,
+      weekNumber,
+      year: monday.getFullYear(),
+    })
   }
 
-  // Format the week start date for display
-  const formatWeekDate = (date: string) => {
+  const fetchActiveTimesheet = async (userId: number) => {
     try {
-      // Parse the date string into a Date object
-      const weekStart = new Date(date)
-      console.log("Original week start date:", weekStart.toISOString())
+      // Format current date for API query
+      const now = new Date()
+      const currentDay = now.getDay() // 0 = Sunday, 1 = Monday, etc.
+      const daysToMonday = currentDay === 0 ? 6 : currentDay - 1 // If Sunday, go back 6 days to previous Monday
 
-      // Ensure we're working with Monday as the first day
-      const dayOfWeek = weekStart.getDay() // 0 = Sunday, 1 = Monday, etc.
-      console.log("Day of week for start date:", dayOfWeek)
+      // Calculate Monday (start of week)
+      const monday = new Date(now)
+      monday.setDate(now.getDate() - daysToMonday)
 
-      // If the start date is not Monday (1), adjust it
-      if (dayOfWeek !== 1) {
-        // If it's Sunday (0), add 1 day to get to Monday
-        // For any other day, add days to get to the next Monday
-        const daysToAdd = dayOfWeek === 0 ? 1 : 8 - dayOfWeek
-        weekStart.setDate(weekStart.getDate() + daysToAdd)
-        console.log("Adjusted to Monday:", weekStart.toISOString())
+      // Format date as YYYY-MM-DD
+      const formattedDate = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`
+
+      // Fetch active timesheet with the formatted date
+      const response = await fetch(`/api/timesheets/active?userId=${userId}&date=${formattedDate}`)
+      const data = await response.json()
+
+      console.log("Timesheet data received:", data)
+      setDebugInfo(data)
+
+      if (data.success && data.timesheet) {
+        setActiveTimesheet(data.timesheet)
       }
-
-      // Calculate the end of the week (Sunday)
-      const weekEnd = new Date(weekStart)
-      weekEnd.setDate(weekStart.getDate() + 6) // Add 6 days to get to Sunday
-      console.log("Week end date:", weekEnd.toISOString())
-
-      // Format dates as MM/DD/YYYY
-      const formatDate = (d: Date) => {
-        return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`
-      }
-
-      return `${formatDate(weekStart)} - ${formatDate(weekEnd)}`
     } catch (error) {
-      console.error("Error formatting date:", error)
-      return date || "Unknown date"
+      console.error("Error fetching active timesheet:", error)
+    } finally {
+      setLoading(false)
     }
+  }
+
+  // Format date for display (e.g., "Mar 31, 2025")
+  const formatDisplayDate = (date: Date) => {
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    }).format(date)
+  }
+
+  // Format date and time for display (e.g., "Mar 31, 2025, 2:30 PM")
+  const formatDisplayDateTime = (dateString: string) => {
+    if (!dateString) return "N/A"
+
+    const date = new Date(dateString)
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) return "Invalid Date"
+
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date)
+  }
+
+  // Calculate total hours from timesheet data
+  const calculateTotalHours = (timesheet: any) => {
+    if (!timesheet) return "0.00"
+
+    // Log the values to help debug
+    console.log("Hours values:", {
+      regular: timesheet.total_regular_hours || timesheet.totalRegularHours,
+      overtime: timesheet.total_overtime_hours || timesheet.totalOvertimeHours,
+      doubleTime: timesheet.total_double_time_hours || timesheet.totalDoubleTimeHours,
+    })
+
+    // Try to get values using both camelCase and snake_case keys
+    const regularHours = Number(timesheet.total_regular_hours || timesheet.totalRegularHours || 0)
+    const overtimeHours = Number(timesheet.total_overtime_hours || timesheet.totalOvertimeHours || 0)
+    const doubleTimeHours = Number(timesheet.total_double_time_hours || timesheet.totalDoubleTimeHours || 0)
+
+    const total = regularHours + overtimeHours + doubleTimeHours
+    return total.toFixed(2)
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "draft":
+        return <Badge variant="outline">Draft</Badge>
+      case "submitted":
+        return <Badge variant="secondary">Submitted</Badge>
+      case "certified":
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-200">Certified</Badge>
+      case "approved":
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-200">Approved</Badge>
+      default:
+        return <Badge variant="outline">{status}</Badge>
+    }
+  }
+
+  if (loading) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>
   }
 
   return (
@@ -172,142 +171,153 @@ export default function EmployeeDashboard() {
 
         <main className="flex-1 p-6">
           <div className="space-y-6">
-            <h1 className="text-3xl font-bold">Employee Dashboard</h1>
-
-            {activeTimesheet && (
-              <Alert className="bg-blue-100 border-blue-300 text-blue-900 shadow-sm mb-6">
-                <Clock className="h-5 w-5 text-blue-600" />
-                <AlertTitle className="text-blue-900 text-lg font-bold">Active Timesheet Available</AlertTitle>
-                <AlertDescription className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-2">
-                  <div>
-                    <p className="font-medium">
-                      You have an active timesheet draft for the week of{" "}
-                      <strong>{formatWeekDate(activeTimesheet.weekStartDate)}</strong>
-                    </p>
-                    <p className="text-sm text-blue-700 mt-1">
-                      Continue working on your timesheet to submit your hours.
-                    </p>
-                  </div>
-                  <Button
-                    className="mt-3 md:mt-0 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2"
-                    onClick={() => router.push(`/employee/timesheet/${activeTimesheet.id}/edit`)}
-                  >
-                    <FileEdit className="h-4 w-4 mr-2" />
-                    Continue Editing
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {!activeTimesheet && (
-              <Alert className="bg-amber-50 border-amber-200 text-amber-800 shadow-sm mb-6">
-                <AlertCircle className="h-5 w-5 text-amber-600" />
-                <AlertTitle className="text-amber-800 text-lg font-bold">No Active Timesheet</AlertTitle>
-                <AlertDescription className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-2">
-                  <div>
-                    <p className="font-medium">You don't have an active timesheet for the current week.</p>
-                    <p className="text-sm text-amber-700 mt-1">Create a new timesheet to record your hours.</p>
-                  </div>
-                  <Button
-                    className="mt-3 md:mt-0 bg-amber-600 hover:bg-amber-700 text-white font-medium px-4 py-2"
-                    onClick={() => router.push("/employee/timesheet/new")}
-                  >
-                    <Clock className="h-4 w-4 mr-2" />
-                    Create New Timesheet
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded relative">
-                <span className="block sm:inline">{error}</span>
-              </div>
-            )}
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <h1 className="text-3xl font-bold">Employee Dashboard</h1>
+              <Button onClick={() => router.push("/employee/timesheet/select-week")}>Create New Timesheet</Button>
+            </div>
 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              <Card>
+              <Card className="md:col-span-2">
                 <CardHeader className="pb-2">
-                  <CardTitle>Current Timesheet</CardTitle>
-                  <CardDescription>This week's timesheet status</CardDescription>
+                  <CardTitle className="text-lg">Current Week Timesheet</CardTitle>
+                  <CardDescription>
+                    {currentWeek ? (
+                      <>
+                        {currentWeek.year}, Week {currentWeek.weekNumber}
+                      </>
+                    ) : (
+                      <>Current week information</>
+                    )}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {activeTimesheet ? (
-                    <div>
-                      <div className="text-2xl font-bold">{formatWeekDate(activeTimesheet.weekStartDate)}</div>
-                      <p className="text-sm text-muted-foreground">Draft in progress</p>
-                      <Button
-                        className="mt-4 w-full"
-                        onClick={() => router.push(`/employee/timesheet/${activeTimesheet.id}/edit`)}
-                      >
-                        Continue Editing
-                      </Button>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="text-2xl font-bold">No Active Timesheet</div>
-                      <p className="text-sm text-muted-foreground">Start a new timesheet for this week</p>
-                      <Button className="mt-4 w-full" onClick={() => router.push("/employee/timesheet/new")}>
-                        Create New Timesheet
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                  {currentWeek ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-5 w-5 text-muted-foreground" />
+                        <span className="font-medium">
+                          Week of {formatDisplayDate(currentWeek.weekStartDate)} to{" "}
+                          {formatDisplayDate(currentWeek.weekEndDate)}
+                        </span>
+                      </div>
 
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle>Pending Submissions</CardTitle>
-                  <CardDescription>Timesheets awaiting certification</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{pendingTimesheets.length}</div>
-                  <p className="text-sm text-muted-foreground">
-                    {pendingTimesheets.length === 0
-                      ? "No pending submissions"
-                      : `${pendingTimesheets.length} timesheet(s) need certification`}
-                  </p>
-                  <Button variant="outline" className="mt-4 w-full" onClick={() => router.push("/employee/timesheets")}>
-                    View All Timesheets
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle>Recent Activity</CardTitle>
-                  <CardDescription>Your latest timesheet submissions</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {recentActivity.length === 0 ? (
-                    <div>
-                      <div className="text-2xl font-bold">No Activity</div>
-                      <p className="text-sm text-muted-foreground">You haven't submitted any timesheets yet</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {recentActivity.map((timesheet) => (
-                        <div key={timesheet.id} className="flex justify-between items-center">
-                          <div>
-                            <div className="font-medium">{new Date(timesheet.weekStartDate).toLocaleDateString()}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {timesheet.status.charAt(0).toUpperCase() + timesheet.status.slice(1)}
+                      {activeTimesheet ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Status:</span>
+                            <div className="flex items-center gap-2">
+                              {getStatusBadge(activeTimesheet.status)}
+                              {activeTimesheet.status === "certified" && (
+                                <span className="text-sm text-muted-foreground">Awaiting review</span>
+                              )}
                             </div>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => router.push(`/employee/timesheet/${timesheet.id}`)}
-                          >
-                            View
-                          </Button>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Last Updated:</span>
+                            <span className="text-sm font-medium">
+                              {activeTimesheet.updated_at ? formatDisplayDateTime(activeTimesheet.updated_at) : "N/A"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Total Hours:</span>
+                            <span className="text-sm font-medium">{calculateTotalHours(activeTimesheet)}</span>
+                          </div>
+
+                          {activeTimesheet.status === "draft" && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-muted-foreground">Saved Progress:</span>
+                              <span className="text-sm font-medium">
+                                {activeTimesheet.completionPercentage
+                                  ? `${activeTimesheet.completionPercentage}% complete`
+                                  : "In progress"}
+                              </span>
+                            </div>
+                          )}
+
+                          {activeTimesheet.submission_date && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-muted-foreground">
+                                {activeTimesheet.status === "certified" ? "Certified" : "Submitted"} on:
+                              </span>
+                              <span className="text-sm font-medium">
+                                {formatDisplayDateTime(activeTimesheet.submission_date)}
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      ))}
+                      ) : (
+                        <div className="py-4 flex items-center gap-3">
+                          <AlertCircle className="h-5 w-5 text-amber-500" />
+                          <p className="text-sm">No timesheet has been created for this week yet.</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center">
+                      <Clock className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                      <p className="text-sm text-muted-foreground">Unable to load current week information</p>
                     </div>
                   )}
                 </CardContent>
+                <CardFooter>
+                  {activeTimesheet ? (
+                    <div className="w-full flex flex-col sm:flex-row gap-2">
+                      <Button
+                        className="flex-1"
+                        variant={activeTimesheet.status === "draft" ? "default" : "outline"}
+                        onClick={() =>
+                          router.push(
+                            `/employee/timesheet/${activeTimesheet.id}${activeTimesheet.status === "draft" ? "/edit" : ""}`,
+                          )
+                        }
+                      >
+                        {activeTimesheet.status === "draft" ? "Continue Editing" : "View Details"}
+                      </Button>
+                      {activeTimesheet.status === "certified" && (
+                        <Button
+                          className="flex-1"
+                          variant="outline"
+                          onClick={() => router.push(`/employee/timesheet/${activeTimesheet.id}/pdf`)}
+                        >
+                          <FileText className="mr-2 h-4 w-4" />
+                          View PDF
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <Button className="w-full" onClick={() => router.push("/employee/timesheet/select-week")}>
+                      <CalendarPlus className="mr-2 h-4 w-4" />
+                      Create Timesheet
+                    </Button>
+                  )}
+                </CardFooter>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">My Timesheets</CardTitle>
+                  <CardDescription>View and manage your timesheets</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[120px] flex items-center justify-center">
+                  <FileText className="h-8 w-8 text-muted-foreground" />
+                </CardContent>
+                <CardFooter>
+                  <Button className="w-full" variant="outline" onClick={() => router.push("/employee/timesheets")}>
+                    View All Timesheets
+                  </Button>
+                </CardFooter>
               </Card>
             </div>
+
+            {/* Debug info - remove in production */}
+            {debugInfo && (
+              <div className="mt-8 p-4 border rounded bg-gray-50">
+                <h3 className="text-sm font-semibold mb-2">Debug Information:</h3>
+                <pre className="text-xs overflow-auto max-h-40">{JSON.stringify(debugInfo, null, 2)}</pre>
+              </div>
+            )}
           </div>
         </main>
       </div>

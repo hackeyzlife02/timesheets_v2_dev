@@ -280,7 +280,7 @@ export default function AdminDashboard() {
                       ? "No pending approvals"
                       : `${submissionStats?.pendingApproval} timesheet(s) need review`}
                   </p>
-                  <Button className="mt-4 w-full" onClick={() => router.push("/admin/approvals")}>
+                  <Button className="mt-4 w-full" onClick={() => router.push("/admin/timesheet-review")}>
                     Review Timesheets
                   </Button>
                 </CardContent>
